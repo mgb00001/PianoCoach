@@ -1,0 +1,165 @@
+:root {
+  --bg: #0f1220;
+  --panel: #171a2b;
+  --panel-2: #1f2338;
+  --text: #e8eaf2;
+  --muted: #9aa0b8;
+  --accent: #4f8cff;
+  --accent-2: #ffcf5c;
+  --border: #2a2f48;
+  --key-white: #f5f6fb;
+  --key-black: #21263a;
+  --key-white-edge: #c9cddd;
+}
+[data-theme="light"] {
+  --bg: #f4f6fc;
+  --panel: #ffffff;
+  --panel-2: #eef1f9;
+  --text: #1b1e2c;
+  --muted: #5a6079;
+  --accent: #2f6bff;
+  --accent-2: #d98a00;
+  --border: #d8dcec;
+  --key-white: #ffffff;
+  --key-black: #2a2f45;
+  --key-white-edge: #c2c7dc;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  display: flex; flex-direction: column;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg); color: var(--text);
+  overflow: hidden;
+}
+
+.topbar {
+  display: flex; align-items: center; gap: 16px;
+  padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--border);
+}
+.brand { font-weight: 700; font-size: 18px; }
+.song-meta { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 14px; }
+.pill {
+  background: var(--panel-2); border: 1px solid var(--border);
+  padding: 2px 8px; border-radius: 999px; font-size: 12px; color: var(--text);
+}
+.pill.warn { background: #4a3b12; border-color: #7a5f16; color: var(--accent-2); }
+[data-theme="light"] .pill.warn { background: #fff4d6; border-color: #e5c56a; }
+
+/* bar / beat counter (top of player) */
+.bar-counter {
+  margin-left: auto; display: flex; align-items: baseline; gap: 6px;
+  padding: 4px 12px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--panel-2); font-variant-numeric: tabular-nums;
+}
+.bar-counter .bc-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.bar-counter .bc-bar, .bar-counter .bc-beat { font-size: 22px; font-weight: 700; color: var(--text); min-width: 1ch; text-align: center; }
+.bar-counter .bc-total { font-size: 13px; color: var(--muted); }
+.bar-counter .bc-sep { color: var(--border); margin: 0 2px; }
+
+/* metronome beat light */
+.beat-light {
+  display: inline-block; width: 9px; height: 9px; margin-left: 7px; border-radius: 50%;
+  background: var(--border); vertical-align: middle; transition: background 90ms ease, box-shadow 90ms ease;
+}
+.beat-light.on { background: var(--accent-2); box-shadow: 0 0 8px 1px var(--accent-2); }
+.beat-light.on.down { background: var(--accent); box-shadow: 0 0 10px 2px var(--accent); }
+
+.modebar { display: flex; gap: 6px; padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--border); }
+.mode-btn {
+  background: var(--panel-2); color: var(--muted); border: 1px solid var(--border);
+  padding: 6px 14px; border-radius: 8px; cursor: pointer; font-size: 14px;
+}
+.mode-btn:hover { color: var(--text); }
+.mode-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+.level-task {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 7px 16px; background: var(--panel-2); border-bottom: 1px solid var(--border);
+  font-size: 14px; color: var(--muted);
+}
+.level-task .lt-num { font-weight: 700; color: var(--accent); }
+.level-task .lt-name { color: var(--text); font-weight: 600; }
+.level-task .lt-play { color: var(--accent-2); font-weight: 600; }
+
+.stage { flex: 1; position: relative; min-height: 0; }
+.chart { position: absolute; inset: 0; }
+[hidden] { display: none !important; }
+.chart canvas { width: 100%; height: 100%; display: block; }
+.chart.placeholder { display: flex; align-items: center; justify-content: center; padding: 24px; }
+
+/* Edit mode (§19): a horizontal scrubber in the top bar, alongside the bar counter, so the bar
+   reads live as you drag. Left = start, right = end. */
+.edit-scrub-wrap {
+  display: flex; align-items: center; gap: 6px; width: 240px; margin-left: 4px; flex: 0 0 auto;
+}
+.edit-scrub-lbl {
+  font-size: 9px; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600; color: var(--muted);
+}
+input[type="range"].edit-scrub {   /* beat the global input[type=range] width so it fills the bar */
+  flex: 1; width: auto; min-width: 80px; margin: 0; accent-color: var(--accent); cursor: pointer;
+}
+
+/* Save blinks softly while there are edits (notes or instrument) not yet saved. */
+#btn-save-edit.pending { animation: save-pending 1.2s ease-in-out infinite; }
+@keyframes save-pending {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(80, 220, 150, 0); filter: brightness(1); }
+  50%      { box-shadow: 0 0 10px 2px rgba(80, 220, 150, 0.75); filter: brightness(1.3); }
+}
+.ph-card {
+  max-width: 520px; text-align: center; background: var(--panel);
+  border: 1px dashed var(--border); border-radius: 14px; padding: 28px;
+}
+.ph-card h2 { margin: 0 0 8px; }
+.ph-card p { color: var(--muted); margin: 0; line-height: 1.5; }
+
+/* lyrics ribbon (a layout band, so it doesn't overlap the piano-roll keyboard) */
+.lyrics-ribbon {
+  flex: 0 0 auto; padding: 8px 16px 12px; text-align: center;
+  background: var(--panel); border-top: 1px solid var(--border);
+}
+.lyric-line { line-height: 1.25; }
+.lyric-line.prev, .lyric-line.next { font-size: 14px; color: var(--muted); opacity: 0.55; min-height: 18px; }
+.lyric-line.cur { font-size: 26px; font-weight: 700; color: var(--text); margin: 2px 0; min-height: 32px; }
+.lyric-line.cur .w { padding: 0 3px; border-radius: 5px; transition: color 0.12s, background 0.12s; }
+.lyric-line.cur .w.sung { color: var(--muted); }
+.lyric-line.cur .w.active { color: #fff; background: var(--accent); }
+
+/* notation modes */
+.chart.notation { overflow: hidden; }
+.score-scroll { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; background: var(--panel); }
+.score-host { position: relative; }
+.score-host svg { display: block; }
+/* engrave on a light "paper" even in dark theme, for legibility */
+.score-host { background: #fbfbfd; }
+.score-host svg path, .score-host svg rect, .score-host svg text { }
+.score-cursor {
+  position: absolute; top: 0; width: 2px; height: 60px;
+  background: var(--accent); pointer-events: none; opacity: 0.85;
+  box-shadow: 0 0 6px var(--accent); border-radius: 2px;
+}
+.notation-note.active { filter: brightness(1.15) saturate(1.4); }
+
+.controls {
+  display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  padding: 10px 16px; background: var(--panel); border-top: 1px solid var(--border);
+}
+.ctl { display: flex; align-items: center; gap: 8px; }
+.ctl label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.ctl.transport { gap: 10px; }
+.readout { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; min-width: 92px; }
+#bar-readout { min-width: 118px; }
+.nudge { display: flex; flex-direction: column; gap: 3px; }
+.nudge button { padding: 1px 9px; font-size: 11px; line-height: 1.1; min-width: 34px; border-radius: 6px; }
+
+button {
+  font: inherit; background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-size: 16px; min-width: 46px; }
+button.active { background: var(--accent-2); color: #201800; border-color: var(--accent-2); }
+
+input[type="range"] { width: 120px; accent-color: var(--accent); }
+select { font: inherit; background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; }

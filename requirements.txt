@@ -1,0 +1,13 @@
+# Light deps: runs the Generator web app (upload/preview/edit/save/export/import/transpose)
+# without the ML analysis stack. analyze_song.py imports librosa/torch/demucs/basic_pitch/
+# whisper lazily, only inside the functions that need them, so the server boots on just this.
+#
+#   py -3.12 -m venv .venv
+#   .venv\Scripts\python.exe -m pip install -r requirements.txt
+#
+# Analysing a NEW song additionally needs requirements-analysis.txt — see README.md.
+
+fastapi
+uvicorn[standard]
+numpy
+python-multipart

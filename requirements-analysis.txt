@@ -1,0 +1,18 @@
+# Heavy analysis stack — needed only to analyse a NEW song (Demucs stems, librosa beat/key
+# detection, basic-pitch melody transcription, Whisper lyrics). Editing/saving/exporting an
+# already-analysed song does not need this — see requirements.txt.
+#
+#   .venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-analysis.txt
+#   .venv\Scripts\python.exe -m pip install --no-deps basic-pitch   # separate: pins an old numpy
+#
+# Also needs `ffmpeg` on PATH (e.g. winget install Gyan.FFmpeg on Windows).
+
+librosa
+soundfile
+torch
+demucs
+openai-whisper
+onnxruntime
+pretty_midi
+resampy
+mir_eval

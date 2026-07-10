@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>PianoCoach Player</title>
+  <!-- ?v= busts stylesheet copies cached before the server sent no-cache headers;
+       bump it when a CSS change must reach browsers holding such a stale entry. -->
+  <link rel="stylesheet" href="css/style.css?v=2" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">🎹 PianoCoach</div>
+    <div class="song-meta">
+      <span id="song-title">Loading…</span>
+      <span id="song-key" class="pill"></span>
+      <span id="song-tempo" class="pill"></span>
+      <span id="synthetic-badge" class="pill warn" hidden>synthetic demo</span>
+    </div>
+    <div class="bar-counter" id="bar-counter" title="Current bar · beat">
+      <span class="bc-label">Bar</span>
+      <span class="bc-bar" id="bc-bar">1</span><span class="bc-total" id="bc-total"></span>
+      <span class="bc-sep">·</span>
+      <span class="bc-label">Beat</span>
+      <span class="bc-beat" id="bc-beat">1</span>
+    </div>
+  </header>
+
+  <nav class="modebar" id="modebar">
+    <button class="mode-btn active" data-mode="keyboard">Keyboard</button>
+    <button class="mode-btn" data-mode="pianoroll">Piano roll</button>
+    <button class="mode-btn" data-mode="clef">Clef</button>
+    <button class="mode-btn" data-mode="score">Score</button>
+  </nav>
+
+  <div id="level-task" class="level-task" hidden></div>
+
+  <main class="stage">
+    <section class="chart" data-chart="keyboard"><canvas id="kbd-canvas"></canvas></section>
+    <section class="chart" data-chart="pianoroll" hidden><canvas id="roll-canvas"></canvas></section>
+    <section class="chart edit-chart" data-chart="edit" hidden><canvas id="edit-canvas"></canvas></section>
+    <section class="chart notation" data-chart="clef" hidden>
+      <div class="score-scroll"><div id="clef-host" class="score-host"></div><div class="score-cursor"></div></div>
+    </section>
+    <section class="chart notation" data-chart="score" hidden>
+      <div class="score-scroll"><div id="score-host" class="score-host"></div><div class="score-cursor"></div></div>
+    </section>
+  </main>
+
+  <div id="lyrics-ribbon" class="lyrics-ribbon" hidden>
+    <div class="lyric-line prev" id="lyric-prev"></div>
+    <div class="lyric-line cur" id="lyric-cur"></div>
+    <div class="lyric-line next" id="lyric-next"></div>
+  </div>
+
+  <footer class="controls">
+    <div class="ctl transport">
+      <button id="btn-play" class="primary" title="Play / Pause">▶</button>
+      <button id="btn-reset" title="Reset to loop/start">⟲</button>
+      <div class="nudge" title="Move cursor ½ bar (best while paused)">
+        <button id="btn-nudge-fwd" title="Forward ½ bar">▲</button>
+        <button id="btn-nudge-back" title="Back ½ bar">▼</button>
+      </div>
+      <span id="time-readout" class="readout">0:00 / 0:00</span>
+      <span id="bar-readout" class="readout"></span>
+    </div>
+
+    <div class="ctl">
+      <label for="tempo">Tempo <span id="tempo-val">100%</span></label>
+      <input id="tempo" type="range" min="50" max="100" step="1" value="100" />
+    </div>
+
+    <div class="ctl">
+      <label for="volume">Volume</label>
+      <input id="volume" type="range" min="0" max="100" step="1" value="85" />
+    </div>
+
+    <div class="ctl">
+      <label for="zoom">Zoom</label>
+      <input id="zoom" type="range" min="60" max="220" step="5" value="120" />
+    </div>
+
+    <div class="ctl toggles">
+      <button id="btn-metro" title="Metronome">🔔 Metro<span class="beat-light" id="metro-light"></span></button>
+      <button id="btn-loop" title="A/B loop">🔁 Loop</button>
+      <button id="btn-lyrics" title="Show lyrics">🎤 Lyrics</button>
+      <button id="btn-compare" title="Preview the original recording at this point (not the accompaniment)">🎧 Original</button>
+      <button id="btn-theme" title="Light / dark">🌓 Theme</button>
+    </div>
+
+    <div class="ctl">
+      <label for="level">Level</label>
+      <select id="level"><!-- populated from the Song Map at load --></select>
+    </div>
+  </footer>
+
+  <script src="vendor/vexflow.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

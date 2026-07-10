@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PianoCoach Generator</title>
+  <style>
+    :root{--bg:#0f1220;--panel:#171a2b;--panel2:#1f2338;--text:#e8eaf2;--muted:#9aa0b8;
+      --accent:#4f8cff;--accent2:#ffcf5c;--border:#2a2f48;--ok:#49c17a;--err:#ff6b6b;}
+    *{box-sizing:border-box;} html,body{margin:0;height:100%;}
+    body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);}
+    header{display:flex;align-items:center;gap:12px;padding:14px 22px;background:var(--panel);border-bottom:1px solid var(--border);}
+    header .brand{font-weight:700;font-size:20px;} header .sub{color:var(--muted);font-size:14px;}
+    main{max-width:1100px;margin:0 auto;padding:22px;display:grid;gap:22px;}
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:20px;}
+    .card h2{margin:0 0 14px;font-size:16px;}
+    label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px;}
+    input[type=text],input[type=file]{width:100%;background:var(--panel2);border:1px solid var(--border);
+      border-radius:8px;color:var(--text);padding:9px 10px;font:inherit;}
+    .row{display:flex;gap:14px;flex-wrap:wrap;} .row>div{flex:1;min-width:180px;}
+    button{font:inherit;background:var(--accent);color:#fff;border:0;border-radius:9px;padding:10px 18px;cursor:pointer;font-weight:600;}
+    button.ghost{background:var(--panel2);color:var(--text);border:1px solid var(--border);}
+    button:disabled{opacity:.5;cursor:not-allowed;}
+    .status{margin-top:14px;padding:12px 14px;border-radius:9px;background:var(--panel2);border:1px solid var(--border);
+      display:none;align-items:center;gap:12px;font-size:14px;}
+    .status.show{display:flex;} .status.ok{border-color:var(--ok);} .status.err{border-color:var(--err);color:var(--err);}
+    .spin{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;
+      animation:spin 0.8s linear infinite;} @keyframes spin{to{transform:rotate(360deg);}}
+    .preview{display:none;} .preview.show{display:block;}
+    iframe{width:100%;height:820px;border:1px solid var(--border);border-radius:12px;background:#000;}
+    .previewbar{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;}
+    .previewbar .title{font-weight:600;} .previewbar .pill{background:var(--panel2);border:1px solid var(--border);
+      border-radius:999px;padding:3px 10px;font-size:12px;color:var(--muted);}
+    table{width:100%;border-collapse:collapse;font-size:14px;} th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--border);}
+    th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.05em;}
+    td .mini{padding:6px 12px;font-size:13px;margin-right:6px;}
+    button.mini.danger{color:var(--err);border-color:#5a2b34;}
+    button.mini.danger:hover{border-color:var(--err);background:#3a1c22;}
+    .note{color:var(--muted);font-size:13px;margin-top:8px;}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">🎹 PianoCoach <span style="color:var(--accent)">Generator</span></div>
+    <div class="sub">upload a song → analyse → preview → generate a shareable player</div>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>1 · Upload &amp; analyse a song</h2>
+      <div class="row">
+        <div><label>Audio file (mp3 / mp4 / wav / m4a / …)</label><input type="file" id="file" accept="audio/*,video/*,.mp3,.m4a,.wav,.mp4,.mkv" /></div>
+      </div>
+      <div class="row">
+        <div><label>Title</label><input type="text" id="title" placeholder="e.g. All Out of Love" /></div>
+        <div><label>Artist (optional)</label><input type="text" id="artist" placeholder="e.g. Air Supply (cover)" /></div>
+      </div>
+      <div style="margin-top:16px;"><button id="analyze">Analyse song</button></div>
+      <div class="status" id="status"><div class="spin" id="spin"></div><span id="statusmsg"></span></div>
+      <div class="note">Analysis runs a full local pipeline (Demucs stems → key/chords/melody → Whisper lyrics). Takes a few minutes; keep this tab open.</div>
+    </section>
+
+    <section class="card">
+      <h2>Import a saved player</h2>
+      <div class="row" style="align-items:flex-end;">
+        <div><label>Metadata backup (.zip exported below)</label><input type="file" id="impfile" accept=".zip" /></div>
+        <div style="flex:0 0 auto;"><button class="ghost" id="import">Import &amp; re-generate</button></div>
+      </div>
+      <div class="note">Re-creates a song from a backup — re-synthesises the accompaniment and restores the reference audio. No re-analysis (fast).</div>
+    </section>
+
+    <section class="card preview" id="previewCard">
+      <h2>2 · Preview</h2>
+      <div class="previewbar">
+        <span class="title" id="pvTitle"></span>
+        <span class="pill" id="pvKey"></span><span class="pill" id="pvTempo"></span>
+        <span style="flex:1"></span>
+        <label style="margin:0;">Transpose to key</label>
+        <select id="keySel" style="width:auto;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:8px;font:inherit;"></select>
+        <button class="ghost" id="applyKey">Apply key</button>
+        <a id="exp" href="#"><button class="ghost">⬇ Export metadata</button></a>
+        <a id="dl" href="#"><button>⬇ Download player (.zip)</button></a>
+      </div>
+      <iframe id="pv" title="Player preview"></iframe>
+      <div class="note">Transpose re-synthesises the accompaniment in the new key (the original 🎧 reference keeps its own key). Tempo is a Player control (live slow-down). Metadata export/import — next.</div>
+    </section>
+
+    <section class="card">
+      <h2>Catalog</h2>
+      <table><thead><tr><th>Title</th><th>Key</th><th>Tempo</th><th>Lyrics</th><th></th></tr></thead>
+        <tbody id="catalog"><tr><td colspan="5" class="note">Loading…</td></tr></tbody></table>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+    let currentItem = null;
+    const setStatus = (msg, cls) => { const s = $("status"); s.className = "status show " + (cls||"");
+      $("statusmsg").textContent = msg; $("spin").style.display = cls ? "none" : "inline-block"; };
+
+    function showPreview(item) {
+      currentItem = item;
+      $("previewCard").classList.add("show");
+      $("pvTitle").textContent = item.title + (item.artist ? " — " + item.artist : "");
+      $("pvKey").textContent = item.key ? `${item.key.tonic} ${item.key.mode}` : "";
+      $("pvTempo").textContent = item.tempo ? `${item.tempo} BPM` : "";
+      if (item.key) {
+        const cur = NAMES.indexOf(item.key.tonic);
+        $("keySel").innerHTML = NAMES.map((n, i) =>
+          `<option value="${i}" ${i === cur ? "selected" : ""}>${n} ${item.key.mode}${i === cur ? " (current)" : ""}</option>`).join("");
+      }
+      // &edit=1 unlocks the 5th "Edit" chart mode + Save button — generator preview only (§19).
+      $("pv").src = `/player/index.html?song=/samples/${item.slug}/song_map.json&edit=1&_=${Date.now()}`;
+      $("dl").href = `/api/generate/${item.slug}`;
+      $("exp").href = `/api/export/${item.slug}`;
+      $("previewCard").scrollIntoView({ behavior: "smooth" });
+    }
+
+    async function refreshAndPreview(slug, okMsg) {
+      await loadCatalog();
+      const items = await (await fetch("/api/catalog")).json();
+      const it = items.find((x) => x.slug === slug);
+      if (okMsg) setStatus(okMsg, "ok");
+      if (it) showPreview(it);
+    }
+
+    async function loadCatalog() {
+      const items = await (await fetch("/api/catalog")).json();
+      const tb = $("catalog");
+      if (!items.length) { tb.innerHTML = '<tr><td colspan="5" class="note">No songs yet — analyse one above.</td></tr>'; return; }
+      tb.innerHTML = items.map((it, i) =>
+        `<tr><td>${it.title||it.slug}${it.artist?` <span class="note">— ${it.artist}</span>`:""}${it.synthetic?' <span class="pill">demo</span>':''}</td>
+         <td>${it.key?`${it.key.tonic} ${it.key.mode}`:"—"}</td><td>${it.tempo?it.tempo+" BPM":"—"}</td>
+         <td>${it.hasLyrics?"✓":"—"}</td>
+         <td><button class="ghost mini" data-i="${i}">Preview</button>
+             <a href="/api/generate/${it.slug}"><button class="ghost mini">⬇ .zip</button></a>
+             <button class="ghost mini danger" data-del="${it.slug}">Delete</button></td></tr>`).join("");
+      tb.querySelectorAll("button[data-i]").forEach((b) => b.onclick = () => showPreview(items[+b.dataset.i]));
+      tb.querySelectorAll("button[data-del]").forEach((b) => b.onclick = async () => {
+        if (!confirm(`Delete "${b.dataset.del}" from the catalog? This removes its generated files.`)) return;
+        await fetch("/api/song/" + encodeURIComponent(b.dataset.del), { method: "DELETE" });
+        loadCatalog();
+      });
+    }
+
+    $("analyze").onclick = async () => {
+      const f = $("file").files[0];
+      if (!f) { setStatus("Choose an audio file first.", "err"); return; }
+      const fd = new FormData();
+      fd.append("audio", f); fd.append("title", $("title").value); fd.append("artist", $("artist").value);
+      $("analyze").disabled = true; setStatus("Uploading…", "");
+      try {
+        const { job_id, title } = await (await fetch("/api/analyze", { method: "POST", body: fd })).json();
+        const poll = setInterval(async () => {
+          const j = await (await fetch(`/api/job/${job_id}`)).json();
+          setStatus(j.message, j.status === "done" ? "ok" : j.status === "error" ? "err" : "");
+          if (j.status === "done" || j.status === "error") {
+            clearInterval(poll); $("analyze").disabled = false;
+            if (j.status === "done") await refreshAndPreview(j.slug);
+          }
+        }, 2500);
+      } catch (e) { setStatus("Upload failed: " + e, "err"); $("analyze").disabled = false; }
+    };
+
+    $("applyKey").onclick = async () => {
+      if (!currentItem || !currentItem.key) return;
+      const cur = NAMES.indexOf(currentItem.key.tonic), target = +$("keySel").value;
+      let s = (target - cur + 12) % 12; if (s > 6) s -= 12;
+      if (s === 0) { setStatus("Already in that key.", ""); return; }
+      $("applyKey").disabled = true; setStatus(`Transposing to ${NAMES[target]}…`, "");
+      try {
+        const fd = new FormData(); fd.append("slug", currentItem.slug); fd.append("semitones", s);
+        const r = await fetch("/api/transpose", { method: "POST", body: fd });
+        if (!r.ok) throw new Error(await r.text());
+        const { slug } = await r.json();
+        await refreshAndPreview(slug, `Transposed to ${NAMES[target]} ${currentItem.key.mode}.`);
+      } catch (e) { setStatus("Transpose failed: " + e, "err"); }
+      $("applyKey").disabled = false;
+    };
+
+    $("import").onclick = async () => {
+      const f = $("impfile").files[0];
+      if (!f) { setStatus("Choose a metadata .zip first.", "err"); return; }
+      $("import").disabled = true; setStatus("Importing & re-generating…", "");
+      try {
+        const fd = new FormData(); fd.append("metadata", f);
+        const r = await fetch("/api/import", { method: "POST", body: fd });
+        if (!r.ok) throw new Error(await r.text());
+        const { slug } = await r.json();
+        await refreshAndPreview(slug, "Imported & re-generated.");
+      } catch (e) { setStatus("Import failed: " + e, "err"); }
+      $("import").disabled = false;
+    };
+
+    loadCatalog();
+  </script>
+</body>
+</html>

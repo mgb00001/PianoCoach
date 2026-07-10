@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pianocoach",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "C:/Users/mgb00/OneDrive/Documents/AI_Projects/Claude/PianoCoach/serve_nocache.py",
+        "8123"
+      ],
+      "port": 8123
+    }
+  ]
+}

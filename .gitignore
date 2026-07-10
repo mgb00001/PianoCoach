@@ -1,0 +1,23 @@
+# Python env / caches
+.venv/
+__pycache__/
+*.pyc
+
+# Generator working data — analysed songs + uploaded source audio.
+# Excluded because these are commercial recordings (copyright), not project code,
+# and are regenerable locally via the Generator (see README "Run the Generator").
+# Both directories are created automatically on first use (mkdir(parents=True)).
+samples/
+webgen/uploads/
+
+# Copyrighted source recordings used for local testing (never publish these).
+*.mp3
+*.m4a
+*.wav
+
+# Claude Code local settings (personal permission grants, not shared config)
+.claude/settings.local.json
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db

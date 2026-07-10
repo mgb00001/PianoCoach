@@ -1,0 +1,217 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://pianocoach.local/schema/song_map/0.2",
+  "title": "PianoCoach Song Map",
+  "description": "The central data contract between the Generator and the Player. Times in seconds; pitches as MIDI note numbers.",
+  "type": "object",
+  "required": ["schema", "title", "key", "tempo", "time_signature", "beats", "chords", "melody"],
+  "properties": {
+    "schema": { "enum": ["pianocoach.songmap/0.1", "pianocoach.songmap/0.2"] },
+    "title": { "type": "string" },
+    "artist": { "type": "string" },
+    "synthetic": {
+      "type": "boolean",
+      "description": "true = data + audio were generated together for Player development (not a transcription of the real recording)."
+    },
+    "source": {
+      "type": "object",
+      "properties": {
+        "file": { "type": "string" },
+        "duration_s": { "type": "number", "minimum": 0 }
+      }
+    },
+    "audio": {
+      "type": "string",
+      "description": "Relative path to the pre-mixed backing file for the current build/level (MVP: a single demo mix)."
+    },
+    "key": {
+      "type": "object",
+      "required": ["tonic", "mode"],
+      "properties": {
+        "tonic": { "type": "string", "description": "e.g. C, C#, Db" },
+        "mode": { "type": "string", "enum": ["major", "minor"] },
+        "relative_minor": { "type": "string" }
+      }
+    },
+    "tempo": {
+      "type": "object",
+      "required": ["bpm"],
+      "properties": {
+        "bpm": { "type": "number", "minimum": 20, "maximum": 300 },
+        "map": {
+          "type": "array",
+          "description": "Optional time->bpm points for rubato.",
+          "items": {
+            "type": "object",
+            "required": ["t", "bpm"],
+            "properties": { "t": { "type": "number" }, "bpm": { "type": "number" } }
+          }
+        }
+      }
+    },
+    "time_signature": { "type": "string", "description": "e.g. 4/4, 3/4" },
+    "beats": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["t", "beat", "bar"],
+        "properties": {
+          "t": { "type": "number", "minimum": 0 },
+          "beat": { "type": "integer", "minimum": 1 },
+          "bar": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
+    "downbeats": {
+      "type": "array",
+      "items": { "type": "number", "minimum": 0 }
+    },
+    "chords": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["t0", "t1", "symbol", "root", "notes"],
+        "properties": {
+          "t0": { "type": "number", "minimum": 0 },
+          "t1": { "type": "number", "minimum": 0 },
+          "bar": { "type": "integer" },
+          "symbol": { "type": "string", "description": "e.g. C, Am, G7" },
+          "root": { "type": "string" },
+          "quality": { "type": "string", "description": "e.g. maj, min, dom7" },
+          "notes": {
+            "type": "array",
+            "items": { "type": "integer", "minimum": 0, "maximum": 127 },
+            "description": "Chord tones as MIDI numbers."
+          },
+          "order": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Which level unlocks this chord (drives Levels 5-9 progression)."
+          }
+        }
+      }
+    },
+    "melody": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["t0", "t1", "midi"],
+        "properties": {
+          "t0": { "type": "number", "minimum": 0 },
+          "t1": { "type": "number", "minimum": 0 },
+          "midi": { "type": "integer", "minimum": 0, "maximum": 127 },
+          "name": { "type": "string", "description": "e.g. G4 (derived for display)." },
+          "hand": { "type": "string", "enum": ["L", "R"] },
+          "clef": { "type": "string", "enum": ["treble", "bass"] }
+        }
+      }
+    },
+    "accompaniment": {
+      "type": "array",
+      "description": "Optional left-hand / bass line note events, same shape as melody items.",
+      "items": {
+        "type": "object",
+        "required": ["t0", "t1", "midi"],
+        "properties": {
+          "t0": { "type": "number" },
+          "t1": { "type": "number" },
+          "midi": { "type": "integer" },
+          "name": { "type": "string" },
+          "hand": { "type": "string", "enum": ["L", "R"] },
+          "clef": { "type": "string", "enum": ["treble", "bass"] }
+        }
+      }
+    },
+    "lyrics": {
+      "type": "object",
+      "description": "Optional time-aligned lyrics for karaoke display. Absent -> Player hides the feature.",
+      "required": ["lines"],
+      "properties": {
+        "source": { "type": "string", "enum": ["asr", "manual", "imported"] },
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["t0", "t1", "text"],
+            "properties": {
+              "t0": { "type": "number", "minimum": 0 },
+              "t1": { "type": "number", "minimum": 0 },
+              "text": { "type": "string" },
+              "words": {
+                "type": "array",
+                "description": "Optional per-word/syllable timing for karaoke highlight.",
+                "items": {
+                  "type": "object",
+                  "required": ["t", "text"],
+                  "properties": {
+                    "t": { "type": "number", "minimum": 0 },
+                    "text": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "reference": {
+      "type": "object",
+      "description": "Optional original recording, bundled preview-only (§15). Never used as accompaniment.",
+      "required": ["audio", "align"],
+      "properties": {
+        "audio": { "type": "string", "description": "Relative path to the bundled original (AAC/.m4a preview encode)." },
+        "key": {
+          "type": "object",
+          "properties": {
+            "tonic": { "type": "string" },
+            "mode": { "type": "string", "enum": ["major", "minor"] }
+          }
+        },
+        "tempo_bpm": { "type": "number" },
+        "note": { "type": "string" },
+        "align": {
+          "type": "object",
+          "description": "Maps session-time <-> original-audio-time.",
+          "required": ["mode"],
+          "properties": {
+            "mode": { "type": "string", "enum": ["identity", "ratio", "anchors"] },
+            "ratio": { "type": "number", "description": "session*ratio = original time (uniform tempo change)." },
+            "anchors": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["s", "o"],
+                "properties": {
+                  "s": { "type": "number", "description": "session time" },
+                  "o": { "type": "number", "description": "original-audio time" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "levels": {
+      "type": "array",
+      "description": "Per-level playback recipe. In the shipped Generator each level's audio is pre-mixed to its own file.",
+      "items": {
+        "type": "object",
+        "required": ["level"],
+        "properties": {
+          "level": { "type": "integer", "minimum": 1, "maximum": 10 },
+          "learner": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Parts the LEARNER plays (muted in backing), e.g. ['chords'], ['melody'], ['melody','chord:1']"
+          },
+          "play_back": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Parts the BACKING provides."
+          },
+          "audio": { "type": "string", "description": "Pre-mixed backing file for this level (Generator output)." }
+        }
+      }
+    }
+  }
+}
