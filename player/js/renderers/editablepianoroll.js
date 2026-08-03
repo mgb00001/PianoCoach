@@ -10,6 +10,10 @@ import { isBlack, midiToName, pcColor } from "../songmap.js";
 const KB_CSS_H = 92;
 const DEFAULT_LEN_BEATS = 1;
 const GRID_SUBDIV = 2;            // edit grid = beat / GRID_SUBDIV (2 = 1/8 notes, 4 = 1/16)
+// Stable per-note id. A history snapshot copies each note ({...n}), so object identity is lost
+// on undo — the id survives the copy and is what lets the selection be restored. Internal only:
+// getMelody() emits {t0,t1,midi}, so it never reaches the Song Map.
+let _uid = 0;
 const DPR = Math.min(window.devicePixelRatio || 1, 2);   // match main.js DPR
 
 export class EditablePianoRollRenderer {
@@ -29,7 +33,7 @@ export class EditablePianoRollRenderer {
     this.numWhite = wi;
 
     // Working copy of the melody we mutate; caller reads it back on Save.
-    this.melody = (song.melody || []).map((n) => ({ ...n }));
+    this.melody = (song.melody || []).map((n) => ({ ...n, _id: ++_uid }));
     this.chords = song._chordNotes || [];
 
     // Live preview of UNSAVED notes: the accompaniment audio only contains the melody as
@@ -434,32 +438,39 @@ export class EditablePianoRollRenderer {
   // ---- undo -----------------------------------------------------------------
   _isVisible() { return this.canvas.offsetParent !== null; }   // edit chart is on-screen
   _notify() { this.onEditState && this.onEditState(); }
+  // A checkpoint stores the melody AND what was highlighted at the time, so undo puts the
+  // selection back too — keep nudging the same note after a Ctrl+Z instead of re-finding it.
   _pushHistory() {
-    this._history.push(this.melody.map((n) => ({ ...n })));     // deep-ish snapshot
+    this._history.push({
+      melody: this.melody.map((n) => ({ ...n })),                // deep-ish snapshot
+      sel: [...this.selection].map((n) => n._id),
+    });
     if (this._history.length > 100) this._history.shift();
     this._notify();
   }
   canUndo() { return this._history.length > 0; }
-  undo() {
-    if (!this._history.length) return;
-    this.melody = this._history.pop();
-    this.selection.clear();          // snapshot notes are new objects → old selection is stale
+  // Restore a checkpoint. Notes are fresh objects, so the selection is rebuilt by id — and any
+  // note the undo did not bring back (e.g. undoing an add) simply drops out of the selection.
+  _restore(snap) {
+    this.melody = snap.melody;
+    const ids = new Set(snap.sel);
+    this.selection = new Set(this.melody.filter((n) => ids.has(n._id)));
     this._clearRefs();               // any reference overlay is stale after undo
     this.onChange();
     this._notify();
     this.render(this._lastState, this.dpr);
   }
+  undo() {
+    if (!this._history.length) return;
+    this._restore(this._history.pop());
+  }
   // Revert EVERYTHING back to the last save/load (Ctrl+click Undo). history[0] is the melody as it
   // was before the first edit this session; the page reloads on save, so that IS the saved state.
   undoAll() {
     if (!this._history.length) return;
-    this.melody = this._history[0];
+    const first = this._history[0];
     this._history = [];
-    this.selection.clear();
-    this._clearRefs();
-    this.onChange();
-    this._notify();
-    this.render(this._lastState, this.dpr);
+    this._restore(first);
   }
 
   // ---- copy + move references ----------------------------------------------
@@ -473,7 +484,7 @@ export class EditablePianoRollRenderer {
     this._pushHistory();
     const originals = [...this.selection];
     const dupes = originals.map((n) => ({ t0: n.t0, t1: n.t1, midi: n.midi, name: n.name,
-                                          hand: "R", clef: "treble", part: "melody" }));
+                                          hand: "R", clef: "treble", part: "melody", _id: ++_uid }));
     for (const d of dupes) this.melody.push(d);
     this.selection = new Set(dupes);
     this.ghost = new Set(originals);                  // dashed full-colour "the original is here"
@@ -498,7 +509,7 @@ export class EditablePianoRollRenderer {
     const raw = this.tAtY(py);
     const t0 = Math.max(0, alt ? raw : this._snapGrid(raw));
     const n = { t0, t1: t0 + this._beatLen(), midi, name: midiToName(midi),
-                hand: "R", clef: "treble", part: "melody" };
+                hand: "R", clef: "treble", part: "melody", _id: ++_uid };
     this.melody.push(n);
     this.selection = new Set([n]);
     this._clearRefs();
