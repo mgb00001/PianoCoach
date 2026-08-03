@@ -15,6 +15,7 @@ webgen/uploads/
 # contain commercial recordings, are regenerable from the Generator, and are not project code.
 exportdownloads/
 playerdownloads/
+catalog/
 
 # Copyrighted source recordings used for local testing (never publish these).
 # The extension rules cover stray files anywhere; "audio files/" is the folder they're
