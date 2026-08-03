@@ -989,3 +989,41 @@ Three fixes/features on the editable roll, verified live in the preview browser:
       (currentTime advances, no media error, `crossOrigin` absent).
 
 Also: **schema `$id` bumped 0.1 → 0.2** to match the `schema` enum + the v0.2 shape (lyrics/reference).
+
+## 20. Analysis speed: GPU acceleration — done 2026-08-03
+
+Analysing a 3.5-min song took **5+ minutes**. Timed per stage (30s clip, extrapolated), the cause
+was two neural nets running on the **CPU** while the machine's **RTX 4070 (8 GB)** sat idle — the
+venv held a **CPU-only torch build** (`2.12.1+cpu`):
+
+| stage | CPU | GPU |
+|---|---|---|
+| Demucs stems | ~74 s | **~17 s** |
+| Whisper `small` lyrics | ~58 s | **~11 s** |
+| basic-pitch melody | ~8 s | (ONNX, unchanged) |
+| librosa beats + chroma | ~6 s | (unchanged) |
+
+**Fixes**
+1. **CUDA torch** — `torch==2.12.1+cu126` + `torchaudio==2.11.0+cu126` (exact version match, so
+   no dependency churn for demucs/whisper). A plain `pip install torch` re-installs `+cpu`.
+2. **`torch_device()`** — one runtime probe, CUDA→CPU, never a hardcoded `"cuda"`. Both Demucs and
+   Whisper catch `RuntimeError` (OOM/driver) and **retry on CPU** rather than failing the job.
+   This is also the portability seam for a future Linux VM port.
+3. **Decode once** — `decode_to_wav()` ffmpeg-decodes the source to one temp WAV. Previously the
+   MP3 was decoded **twice** (22k mono + 44.1k stereo), each time via librosa's slow deprecated
+   `audioread` fallback (libsndfile can't parse these MP3s: *"Giving up searching valid MPEG
+   header"*). `analyze()` was split into `_analyze_loaded()` to scope the temp dir's lifetime.
+4. **Demucs overlap** — kept at 0.25 on GPU (quality is cheap there), dropped to 0.1 on the CPU
+   fallback, where minutes are actually at stake.
+
+**Result: 5+ min → 65 s end-to-end**, verified on the real file. Output equivalence checked against
+the previous CPU run of the same source: key, BPM, beat count (374) and duration **identical**;
+chords 138→141, melody 376→381 (normal variation).
+
+**Whisper stays fp32 even on GPU.** An fp16 run merged lyric lines (37→22), which is bad for the
+3-line ribbon. Re-testing on an identical vocal stem showed fp16 giving 38 *good* lines — so the
+merging was Whisper's own **run-to-run variance**, not precision. fp32 is kept anyway: it costs
+~4 s in a ~60 s pipeline and keeps the numerics identical to the long-validated CPU path.
+
+*Not done (deferred by choice):* progressive preview — showing chords/melody at ~15 s and letting
+lyrics arrive later. Biggest remaining *perceived*-speed win; touches the job-status flow.

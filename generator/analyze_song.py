@@ -167,6 +167,35 @@ def simplify_chords(raw, tonic_idx, mode, beats):
     return out
 
 
+def torch_device():
+    """Fastest available torch device. Demucs + Whisper dominate the runtime, and both are
+    ~10x faster on CUDA — but this stays a runtime probe (never a hardcoded 'cuda') so the
+    pipeline still runs anywhere, including a CPU-only box or the planned Linux VM port."""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return "cuda"
+    except Exception:                               # noqa: BLE001 - torch missing/broken -> CPU
+        pass
+    return "cpu"
+
+
+def decode_to_wav(path, tmpdir):
+    """Decode the source once to a 44.1k stereo WAV via ffmpeg.
+
+    librosa can't read these MP3s through libsndfile, so it silently falls back to the slow
+    deprecated `audioread` path — and the pipeline decoded the same file TWICE (22k mono for
+    analysis, 44.1k stereo for Demucs). One ffmpeg decode up front, read back via soundfile,
+    is far quicker. Returns None if ffmpeg is unavailable (callers fall back to the original)."""
+    dst = Path(tmpdir) / "decoded.wav"
+    try:
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(path),
+                        "-ac", "2", "-ar", "44100", str(dst)], check=True)
+        return dst if dst.exists() else None
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+
 def separate_stems(path, analysis_sr):
     """Separate stems via the Demucs Python API, kept IN MEMORY (no temp files, so
     nothing syncs to OneDrive). Returns {stem: mono np.array at analysis_sr}."""
@@ -186,10 +215,27 @@ def separate_stems(path, analysis_sr):
     mix = torch.tensor(wav, dtype=torch.float32)
     ref = mix.mean(0)
     mix = (mix - ref.mean()) / (ref.std() + 1e-8)
-    with torch.no_grad():
-        sources = apply_model(model, mix[None], device="cpu", split=True,
-                              overlap=0.25, progress=True)[0]
-    sources = sources * ref.std() + ref.mean()
+
+    # On GPU keep the higher overlap (better seams, and it's cheap there); on CPU trade a
+    # little separation quality for speed, since that's the path where minutes are at stake.
+    device = torch_device()
+    model.to(device)
+
+    def _run(dev, overlap):
+        with torch.no_grad():
+            return apply_model(model, mix[None], device=dev, split=True,
+                               overlap=overlap, progress=True)[0]
+
+    try:
+        sources = _run(device, 0.25 if device == "cuda" else 0.1)
+    except RuntimeError as e:                       # OOM/driver hiccup -> degrade, don't fail
+        if device == "cpu":
+            raise
+        print(f"  GPU separation failed ({e}); falling back to CPU …")
+        model.to("cpu")
+        torch.cuda.empty_cache()
+        sources = _run("cpu", 0.1)
+    sources = sources.cpu() * ref.std() + ref.mean()      # undo the input normalisation
 
     out = {}
     for name, src in zip(model.sources, sources):   # htdemucs: drums, bass, other, vocals
@@ -204,9 +250,23 @@ def transcribe_lyrics(vocal, sr):
     transcribe imperfectly but are fine as an overlay. Learner's own audio -> personal use."""
     import librosa
     import whisper
-    model = whisper.load_model("small")
     audio16 = librosa.resample(np.asarray(vocal, dtype=np.float32), orig_sr=sr, target_sr=16000)
-    result = model.transcribe(audio16, word_timestamps=True, fp16=False)
+
+    # Stay in fp32 even on the GPU. Measured, fp16 bought no reliable speed-up here (~seconds
+    # in a ~1-minute pipeline) and it changes the numerics of the one output whose quality is
+    # judged by ear — the transcription. Same maths as the long-validated CPU path.
+    device = torch_device()
+    try:
+        model = whisper.load_model("small", device=device)
+        result = model.transcribe(audio16, word_timestamps=True, fp16=False)
+    except RuntimeError as e:                        # OOM/driver hiccup -> degrade, don't fail
+        if device == "cpu":
+            raise
+        print(f"  GPU transcription failed ({e}); falling back to CPU …")
+        import torch
+        torch.cuda.empty_cache()
+        model = whisper.load_model("small", device="cpu")
+        result = model.transcribe(audio16, word_timestamps=True, fp16=False)
     lines = []
     for seg in result.get("segments", []):
         text = seg["text"].strip()
@@ -476,6 +536,7 @@ def transpose_song(slug, semitones):
 # ------------------------------------------------------------------------ main
 def analyze(path, title, artist, use_stems=False):
     import librosa
+    import tempfile
     path = Path(path)
     title = title or path.stem
     slug = slugify(title)
@@ -483,16 +544,30 @@ def analyze(path, title, artist, use_stems=False):
     audio_dir = out_dir / "audio"
     audio_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"Loading {path.name} …")
-    y, sr = librosa.load(str(path), sr=22050, mono=True)
-    dur = len(y) / sr
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Decode the compressed source ONCE; every later read is a fast WAV read.
+        decoded = decode_to_wav(path, tmpdir)
+        src = decoded or path
+
+        print(f"Loading {path.name} …")
+        y, sr = librosa.load(str(src), sr=22050, mono=True)
+        dur = len(y) / sr
+
+        return _analyze_loaded(path, src, y, sr, dur, title, artist, slug,
+                               out_dir, audio_dir, use_stems)
+
+
+def _analyze_loaded(path, src, y, sr, dur, title, artist, slug, out_dir, audio_dir, use_stems):
+    """The analysis proper (split out so the decoded temp WAV's lifetime is scoped above).
+    `path` = the ORIGINAL user file (kept for the reference encode); `src` = decoded WAV."""
+    import librosa
 
     # By default analyse the full mix. With --stems, separate and use the VOCAL stem for
     # melody and the BASS+OTHER (drums removed) for key/chords — much cleaner.
     y_mel = y_harm = y_beat = y
     if use_stems:
-        print("Separating stems with Demucs (CPU) …")
-        stems = separate_stems(path, sr)
+        print(f"Separating stems with Demucs ({torch_device().upper()}) …")
+        stems = separate_stems(src, sr)
         y_mel = stems["vocals"]
         y_beat = stems["drums"]                 # beats off the isolated drum stem…
         if float(np.sqrt(np.mean(stems["drums"] ** 2))) < 0.005:

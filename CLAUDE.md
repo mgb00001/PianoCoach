@@ -16,8 +16,16 @@ Resolution that works and should be kept:
 
 ## Environment quick facts
 
-- Server venv: `.venv` on **Python 3.12** (`py -3.12`); 3.14 is the machine default but lacks
-  ML wheels. In `cmd`, invoke with backslashes: `.venv\Scripts\python.exe`.
+- **Analysis venv (the one that matters): `C:\AIProjects(local)\pianocoach-venv312\`** — Python
+  3.12, kept **outside OneDrive** so 2.6 GB of CUDA torch isn't sync-churned. It holds the
+  **CUDA** build (`torch==2.12.1+cu126`, `torchaudio==2.11.0+cu126`, installed from
+  `https://download.pytorch.org/whl/cu126`). This is what `Launch PianoCoach.bat` now uses, and
+  it makes song analysis **~5x faster (5 min → ~65 s)** on the machine's RTX 4070.
+  ⚠️ A plain `pip install torch` silently installs the `+cpu` build and puts analysis back to
+  ~5 minutes. If analysis is ever slow, check `torch.cuda.is_available()` **first**.
+- Fallback venv: `.venv` in the repo (Python 3.12, ~1.2 GB, CPU-only torch). The launcher falls
+  back to it only if the external venv is missing — everything still works, just slowly.
+  In `cmd`, invoke with backslashes: `.venv\Scripts\python.exe`.
 - Two-tier deps, split into `requirements.txt` (light — runs the Generator UI + edit/save) and
   `requirements-analysis.txt` (heavy — needed only to analyse a NEW song: librosa, torch,
   demucs, whisper, onnxruntime, pretty_midi, resampy, mir_eval). `basic-pitch` installs
