@@ -280,15 +280,49 @@ async def api_export(slug: str):
                              headers={"Content-Disposition": f'attachment; filename="PianoCoach_export_{slug}.zip"'})
 
 
+def _find_song_map(z: zipfile.ZipFile) -> str:
+    """Locate song_map.json in either kind of zip the Generator produces.
+
+    /api/export puts it at the root; /api/generate (the shareable player) puts it at
+    song/song_map.json. Import used to hard-code the root name, so importing a downloaded
+    player -- exactly what the UI invites -- failed with "no item named 'song_map.json'".
+    Take the shallowest match so a stray nested copy can't win."""
+    names = [n for n in z.namelist() if not n.endswith("/")]
+    cands = [n for n in names if posixpath.basename(n) == "song_map.json"]
+    if not cands:
+        raise HTTPException(400, "not a PianoCoach file: no song_map.json inside. Expected a "
+                                 "metadata export or a downloaded player .zip.")
+    return min(cands, key=lambda n: (n.count("/"), len(n)))
+
+
+def _find_reference(z: zipfile.ZipFile, d: dict):
+    """Find the bundled original recording. The metadata export stores it under reference/;
+    the player zip keeps it beside the accompaniment in song/audio/. Match on the filename the
+    Song Map already points at, then fall back to the export layout."""
+    want = posixpath.basename(((d.get("reference") or {}).get("audio") or ""))
+    names = [n for n in z.namelist() if not n.endswith("/")]
+    if want:
+        for n in names:
+            if posixpath.basename(n) == want:
+                return n
+    refs = [n for n in names if n.startswith("reference/")]
+    return refs[0] if refs else None
+
+
 @app.post("/api/import")
 async def api_import(metadata: UploadFile = File(...)):
-    """Import a metadata backup -> re-generate the song folder (re-synth accompaniment, restore
-    reference). No re-analysis. Returns the slug."""
+    """Import a metadata backup OR a downloaded player .zip -> re-generate the song folder
+    (re-synth accompaniment, restore reference). No re-analysis. Returns the slug."""
     try:
         z = zipfile.ZipFile(io.BytesIO(await metadata.read()))
-        d = json.loads(z.read("song_map.json"))
     except Exception as e:                             # noqa: BLE001
-        raise HTTPException(400, f"not a valid PianoCoach metadata file: {e}")
+        raise HTTPException(400, f"not a readable .zip file: {e}")
+
+    entry = _find_song_map(z)
+    try:
+        d = json.loads(z.read(entry))
+    except Exception as e:                             # noqa: BLE001
+        raise HTTPException(400, f"{entry} in the archive is not valid JSON: {e}")
 
     slug = analyze_song.slugify(d.get("title") or "imported")
     song_dir = SAMPLES / slug
@@ -298,10 +332,10 @@ async def api_import(metadata: UploadFile = File(...)):
     d["audio"] = analyze_song.render_accompaniment(d.get("melody", []), d.get("chords", []), dur, song_dir / "audio",
                                                    instrument=d.get("instrument", "grand"))
 
-    refs = [n for n in z.namelist() if n.startswith("reference/") and not n.endswith("/")]
-    if refs and d.get("reference"):
-        rn = refs[0].split("/")[-1]
-        (song_dir / "audio" / rn).write_bytes(z.read(refs[0]))
+    ref_entry = _find_reference(z, d) if d.get("reference") else None
+    if ref_entry:
+        rn = posixpath.basename(ref_entry)
+        (song_dir / "audio" / rn).write_bytes(z.read(ref_entry))
         d["reference"]["audio"] = f"audio/{rn}"
     else:
         d["reference"] = None
