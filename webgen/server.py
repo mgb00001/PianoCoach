@@ -8,11 +8,14 @@ Run:  <venv>/Scripts/python.exe -m uvicorn webgen.server:app --port 8770
 """
 import io
 import json
+import os
 import posixpath
 import re
 import shutil
+import stat
 import sys
 import threading
+import time
 import uuid
 import zipfile
 from pathlib import Path
@@ -208,14 +211,51 @@ async def api_edit(slug: str, request: Request):
     return {"ok": True, "melody_notes": len(clean)}
 
 
+def _rmtree_hard(d: Path, tries: int = 4):
+    """Delete a song folder properly on Windows/OneDrive.
+
+    `rmtree(ignore_errors=True)` used to leave behind empty <slug>/ + <slug>/audio/ skeletons:
+    an audio file still held by a player/preview (or a OneDrive sync lock) makes the unlink
+    fail, and the error was silently swallowed. Clear read-only bits, retry a few times with a
+    short backoff, and report honestly if the folder still won't go."""
+    def on_error(func, path, _exc):                    # read-only -> chmod and retry once
+        try:
+            os.chmod(path, stat.S_IWRITE)
+            func(path)
+        except OSError:
+            pass
+
+    for i in range(tries):
+        shutil.rmtree(d, onerror=on_error)
+        if not d.exists():
+            return True
+        time.sleep(0.25 * (i + 1))                     # let a transient lock clear
+    return not d.exists()
+
+
 @app.delete("/api/song/{slug}")
 async def api_delete(slug: str):
     """Remove a song/variation from the catalog (deletes its samples/<slug> folder)."""
     d = SAMPLES / slug
     if not (d / "song_map.json").exists():
         raise HTTPException(404, "no such song")
-    shutil.rmtree(d, ignore_errors=True)
+    if not _rmtree_hard(d):
+        # Don't leave a phantom catalog entry: the map is gone, so the song is out of the
+        # catalog either way — but say that some files are locked rather than claiming success.
+        raise HTTPException(500, f"could not fully delete {slug} — files are locked "
+                                 f"(close the preview/player and try again)")
     return {"deleted": slug}
+
+
+@app.post("/api/catalog/sweep")
+async def api_sweep():
+    """Remove leftover empty song folders (skeletons from interrupted/locked deletes)."""
+    removed = []
+    for p in sorted(SAMPLES.glob("*/")):
+        if p.is_dir() and not (p / "song_map.json").exists() and not any(p.rglob("*.*")):
+            if _rmtree_hard(p):
+                removed.append(p.name)
+    return {"removed": removed, "count": len(removed)}
 
 
 @app.get("/api/export/{slug}")
