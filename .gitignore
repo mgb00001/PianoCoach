@@ -10,7 +10,16 @@ __pycache__/
 samples/
 webgen/uploads/
 
+# Local download/unpack area for the Generator's outputs — exported metadata zips and
+# generated standalone players. Build artefacts of songs above, so same reasoning: they
+# contain commercial recordings, are regenerable from the Generator, and are not project code.
+exportdownloads/
+playerdownloads/
+
 # Copyrighted source recordings used for local testing (never publish these).
+# The extension rules cover stray files anywhere; "audio files/" is the folder they're
+# kept in, ignored wholesale so nothing in it can be committed regardless of format.
+audio files/
 *.mp3
 *.m4a
 *.wav
